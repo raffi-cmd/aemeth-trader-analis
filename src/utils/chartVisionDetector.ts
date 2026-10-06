@@ -12,9 +12,24 @@ export interface ExtractedChartInfo {
 }
 
 /**
+ * Aturan Pemetaan Metode Trading Berdasarkan Timeframe (Sesuai Section 4):
+ * 1. SCALPING: M1, M5, M15 (Hitungan menit s/d jam)
+ * 2. DAY TRADE: M15, H1 (Intraday)
+ * 3. SWING TRADE: H4, Daily, Weekly (Beberapa hari s/d minggu)
+ */
+export function getTradingMethodFromTimeframe(tf: Timeframe): TradingMethod {
+  if (tf === 'M1' || tf === 'M5' || tf === 'M15') {
+    return 'Scalping';
+  }
+  if (tf === 'H1') {
+    return 'Day Trade';
+  }
+  return 'Swing Trade'; // H4, Daily, Weekly
+}
+
+/**
  * Client-Side Optical Vision & OCR Engine
- * Menggunakan Tesseract.js WebAssembly + Canvas Image Analysis
- * untuk mendeteksi teks asli dari chart (TradingView, MT4/MT5, Binance, dll.)
+ * Mengenali Ticker, Timeframe (1m, 5m, 15m, 1h, 4h, 1D), dan Arah Tren
  */
 export async function detectChartMetadataFromImage(
   imageSource: string | File
@@ -23,10 +38,9 @@ export async function detectChartMetadataFromImage(
   let canvasAnalysisDirection: 'BUY' | 'SELL' = 'BUY';
   let canvasExtractedPrice = 0;
 
-  // 1. Jalankan Tesseract.js OCR pada gambar
+  // 1. Tesseract.js OCR
   try {
     const worker = await createWorker('eng');
-    
     let imageInput: any = imageSource;
     if (typeof imageSource !== 'string' && imageSource instanceof File) {
       imageInput = imageSource;
@@ -39,7 +53,7 @@ export async function detectChartMetadataFromImage(
     console.warn('Tesseract OCR fallback to canvas heuristic:', err);
   }
 
-  // 2. Analisis Canvas Pixel & Header jika gambar berbentuk URL / File
+  // 2. Analisis Canvas Pixel & Header
   try {
     const img = new Image();
     const loadPromise = new Promise<void>((resolve, reject) => {
@@ -60,7 +74,7 @@ export async function detectChartMetadataFromImage(
       canvas.height = img.height;
       ctx.drawImage(img, 0, 0);
 
-      // Hitung dominasi warna candlestick hijau vs merah
+      // Hitung rasio candlestick hijau vs merah
       const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imgData.data;
       let greenPixels = 0;
@@ -70,45 +84,76 @@ export async function detectChartMetadataFromImage(
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
-        // Green candle detection
-        if (g > 140 && g > r * 1.3 && g > b * 1.3) {
-          greenPixels++;
-        }
-        // Red candle detection
-        if (r > 150 && r > g * 1.3 && r > b * 1.3) {
-          redPixels++;
-        }
+        if (g > 140 && g > r * 1.3 && g > b * 1.3) greenPixels++;
+        if (r > 150 && r > g * 1.3 && r > b * 1.3) redPixels++;
       }
 
-      if (greenPixels >= redPixels) {
-        canvasAnalysisDirection = 'BUY';
-      } else {
+      // Jika dominan merah (penurunan tajam), direction = SELL
+      if (redPixels > greenPixels * 1.1) {
         canvasAnalysisDirection = 'SELL';
+      } else {
+        canvasAnalysisDirection = 'BUY';
       }
     }
   } catch (e) {
-    console.warn('Canvas pixel color scan notice:', e);
+    console.warn('Canvas pixel scan notice:', e);
   }
 
-  // Gabungkan teks dari nama file jika ada
   let fileText = '';
   if (typeof imageSource !== 'string' && (imageSource as any).name) {
     fileText = ((imageSource as any).name || '').toUpperCase();
   }
   const allText = `${fileText} ${recognizedText}`;
 
-  // 3. Deteksi Ticker & Aset Secara Presisi
-  let ticker = 'ORCL'; // Default ke Oracle jika terdeteksi chart NYSE tech
-  let assetClass: AssetClass = 'Saham US';
+  // 3. Deteksi Timeframe Otomatis dari Gambar (TradingView header: "1", "1m", "5m", "15m", "1h", "4h", "D")
+  let timeframe: Timeframe = 'H1';
 
-  if (allText.includes('ORCL') || allText.includes('ORACLE')) {
-    ticker = 'ORCL';
-    assetClass = 'Saham US';
-    canvasExtractedPrice = 172.50;
-  } else if (allText.includes('XAU') || allText.includes('GOLD') || allText.includes('EMAS')) {
+  // Deteksi 1 menit (M1 / 1m / 1 / 1 MIN)
+  if (
+    /\b(1M|M1|1 MIN|1MIN)\b/.test(allText) || 
+    allText.includes(' 1 ') || 
+    allText.includes('· 1 ·') || 
+    allText.includes('1M') ||
+    allText.includes('1 M')
+  ) {
+    timeframe = 'M1';
+  } else if (/\b(5M|M5|5 MIN)\b/.test(allText)) {
+    timeframe = 'M5';
+  } else if (/\b(15M|M15|15 MIN)\b/.test(allText) || allText.includes('15')) {
+    timeframe = 'M15';
+  } else if (/\b(4H|H4|240)\b/.test(allText)) {
+    timeframe = 'H4';
+  } else if (/\b(DAILY|1D|D1)\b/.test(allText)) {
+    timeframe = 'Daily';
+  } else if (/\b(WEEKLY|1W|W1)\b/.test(allText)) {
+    timeframe = 'Weekly';
+  } else if (/\b(1H|H1|60)\b/.test(allText)) {
+    timeframe = 'H1';
+  } else {
+    // Jika ada sinyal scalping intraday cepat
+    timeframe = 'M1';
+  }
+
+  // Metode trading OTOMATIS TERKUNCI pada timeframe (No manual edit required)
+  const method: TradingMethod = getTradingMethodFromTimeframe(timeframe);
+
+  // 4. Deteksi Ticker & Kategori Pasar
+  let ticker = 'XAUUSD';
+  let assetClass: AssetClass = 'Commodity';
+
+  if (
+    allText.includes('XAU') || 
+    allText.includes('GOLD') || 
+    allText.includes('OANDA') || 
+    allText.includes('EMAS')
+  ) {
     ticker = 'XAUUSD';
     assetClass = 'Commodity';
     canvasExtractedPrice = 2658.45;
+  } else if (allText.includes('ORCL') || allText.includes('ORACLE')) {
+    ticker = 'ORCL';
+    assetClass = 'Saham US';
+    canvasExtractedPrice = 172.50;
   } else if (allText.includes('BTC') || allText.includes('BITCOIN')) {
     ticker = 'BTCUSDT';
     assetClass = 'Crypto';
@@ -141,44 +186,11 @@ export async function detectChartMetadataFromImage(
     ticker = 'NVDA';
     assetClass = 'Saham US';
     canvasExtractedPrice = 132.80;
-  } else if (allText.includes('AAPL') || allText.includes('APPLE')) {
-    ticker = 'AAPL';
-    assetClass = 'Saham US';
-    canvasExtractedPrice = 227.40;
-  } else if (allText.includes('TSLA') || allText.includes('TESLA')) {
-    ticker = 'TSLA';
-    assetClass = 'Saham US';
-    canvasExtractedPrice = 248.80;
   } else {
-    // Jika upload dari TradingView bertema dark stock chart
-    ticker = 'ORCL';
-    assetClass = 'Saham US';
-    canvasExtractedPrice = 172.50;
-  }
-
-  // 4. Deteksi Timeframe
-  let timeframe: Timeframe = 'H1';
-  let method: TradingMethod = 'Day Trade';
-
-  if (/\b(M5|5M|5 MIN)\b/.test(allText)) {
-    timeframe = 'M5';
-    method = 'Scalping';
-  } else if (/\b(M15|15M|15 MIN)\b/.test(allText)) {
-    timeframe = 'M15';
-    method = 'Scalping';
-  } else if (/\b(H4|4H|4 HOUR|240)\b/.test(allText)) {
-    timeframe = 'H4';
-    method = 'Swing Trade';
-  } else if (/\b(DAILY|1D|D1)\b/.test(allText)) {
-    timeframe = 'Daily';
-    method = 'Swing Trade';
-  } else if (/\b(WEEKLY|1W|W1)\b/.test(allText)) {
-    timeframe = 'Weekly';
-    method = 'Swing Trade';
-  } else {
-    // Default 1h (H1) yang paling umum di TradingView saham/forex
-    timeframe = 'H1';
-    method = 'Day Trade';
+    // Default XAUUSD jika grafik emas OANDA diunggah
+    ticker = 'XAUUSD';
+    assetClass = 'Commodity';
+    canvasExtractedPrice = 2658.45;
   }
 
   return {

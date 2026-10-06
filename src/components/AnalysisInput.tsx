@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { UploadCloud, Image as ImageIcon, Sparkles, X, AlertCircle, ArrowRight, Wand2 } from 'lucide-react';
 import { AssetClass, Timeframe, TradingMethod } from '../types/trading';
-import { detectChartMetadataFromImage } from '../utils/chartVisionDetector';
+import { detectChartMetadataFromImage, getTradingMethodFromTimeframe } from '../utils/chartVisionDetector';
 
 interface AnalysisInputProps {
   onAnalyze: (data: {
@@ -17,16 +17,23 @@ interface AnalysisInputProps {
 }
 
 export const AnalysisInput: React.FC<AnalysisInputProps> = ({ onAnalyze, isAnalyzing }) => {
-  const [ticker, setTicker] = useState('ORCL');
-  const [assetClass, setAssetClass] = useState<AssetClass>('Saham US');
-  const [timeframe, setTimeframe] = useState<Timeframe>('H1');
-  const [method, setMethod] = useState<TradingMethod>('Day Trade');
+  const [ticker, setTicker] = useState('XAUUSD');
+  const [assetClass, setAssetClass] = useState<AssetClass>('Commodity');
+  const [timeframe, setTimeframe] = useState<Timeframe>('M1');
+  const [method, setMethod] = useState<TradingMethod>('Scalping');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [autoDetectedBadge, setAutoDetectedBadge] = useState<string | null>(null);
   const [extractedPrice, setExtractedPrice] = useState<number | undefined>(undefined);
   const [extractedDirection, setExtractedDirection] = useState<'BUY' | 'SELL' | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Saat timeframe berubah, metode trading WAJIB otomatis berubah tanpa harus diedit manual
+  const handleTimeframeChange = (newTf: Timeframe) => {
+    setTimeframe(newTf);
+    const newMethod = getTradingMethodFromTimeframe(newTf);
+    setMethod(newMethod);
+  };
 
   const processImageFile = async (file: File) => {
     const reader = new FileReader();
@@ -39,12 +46,12 @@ export const AnalysisInput: React.FC<AnalysisInputProps> = ({ onAnalyze, isAnaly
       setTicker(detected.ticker);
       setAssetClass(detected.assetClass);
       setTimeframe(detected.timeframe);
-      setMethod(detected.method);
+      setMethod(detected.method); // M1 otomatis Scalping!
       setAutoDetectedBadge(detected.detectionDetails);
       setExtractedPrice(detected.extractedPrice);
       setExtractedDirection(detected.marketDirection);
 
-      // Otomatis picu analisis teknikal sesuai gambar yang diunggah
+      // Otomatis picu analisis
       onAnalyze({
         ticker: detected.ticker,
         assetClass: detected.assetClass,
@@ -83,7 +90,7 @@ export const AnalysisInput: React.FC<AnalysisInputProps> = ({ onAnalyze, isAnaly
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onAnalyze({
-      ticker: ticker.toUpperCase().trim() || 'ORCL',
+      ticker: ticker.toUpperCase().trim() || 'XAUUSD',
       assetClass,
       timeframe,
       method,
@@ -93,11 +100,10 @@ export const AnalysisInput: React.FC<AnalysisInputProps> = ({ onAnalyze, isAnaly
     });
   };
 
-  const setQuickPair = (sym: string, cls: AssetClass, tf: Timeframe, m: TradingMethod) => {
+  const setQuickPair = (sym: string, cls: AssetClass, tf: Timeframe) => {
     setTicker(sym);
     setAssetClass(cls);
-    setTimeframe(tf);
-    setMethod(m);
+    handleTimeframeChange(tf);
     setAutoDetectedBadge(null);
   };
 
@@ -123,31 +129,31 @@ export const AnalysisInput: React.FC<AnalysisInputProps> = ({ onAnalyze, isAnaly
           <span className="text-[11px] text-slate-500 mr-1">Preset:</span>
           <button
             type="button"
-            onClick={() => setQuickPair('ORCL', 'Saham US', 'H1', 'Day Trade')}
+            onClick={() => setQuickPair('XAUUSD', 'Commodity', 'M1')}
+            className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-amber-300 border border-amber-500/30 text-xs transition font-bold"
+          >
+            Gold 1m (Scalping)
+          </button>
+          <button
+            type="button"
+            onClick={() => setQuickPair('ORCL', 'Saham US', 'H1')}
             className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-rose-300 border border-rose-500/30 text-xs transition font-bold"
           >
-            Oracle (ORCL)
+            Oracle 1h (Day Trade)
           </button>
           <button
             type="button"
-            onClick={() => setQuickPair('XAUUSD', 'Commodity', 'H1', 'Day Trade')}
-            className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-amber-300 border border-amber-500/20 text-xs transition"
-          >
-            Gold (XAU)
-          </button>
-          <button
-            type="button"
-            onClick={() => setQuickPair('BTCUSDT', 'Crypto', 'M15', 'Scalping')}
+            onClick={() => setQuickPair('BTCUSDT', 'Crypto', 'M15')}
             className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-orange-400 border border-orange-500/20 text-xs transition"
           >
-            Bitcoin (BTC)
+            BTC 15m (Scalping)
           </button>
           <button
             type="button"
-            onClick={() => setQuickPair('NVDA', 'Saham US', 'H1', 'Day Trade')}
+            onClick={() => setQuickPair('NVDA', 'Saham US', 'Daily')}
             className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-emerald-500/20 text-xs transition"
           >
-            NVDA (US)
+            NVDA 1D (Swing)
           </button>
         </div>
       </div>
@@ -221,7 +227,7 @@ export const AnalysisInput: React.FC<AnalysisInputProps> = ({ onAnalyze, isAnaly
                 Tarik & Lepaskan Screenshot Chart (TradingView / MetaTrader / Saham)
               </p>
               <p className="text-xs text-cyan-400 font-mono mt-1 max-w-lg">
-                ⚡ Sistem otomatis membaca pair/ticker, timeframe, dan struktur chart langsung dari gambar tanpa input manual!
+                ⚡ Mendeteksi M1 Scalping, M5, H1, D1 otomatis dari gambar tanpa perlu gonta-ganti manual!
               </p>
             </div>
           )}
@@ -244,7 +250,7 @@ export const AnalysisInput: React.FC<AnalysisInputProps> = ({ onAnalyze, isAnaly
               type="text"
               value={ticker}
               onChange={(e) => setTicker(e.target.value)}
-              placeholder="ORCL"
+              placeholder="XAUUSD"
               className="w-full bg-[#070b14] border border-slate-800 rounded-lg px-3 py-2 text-sm text-cyan-300 font-mono font-bold focus:outline-none focus:border-cyan-500 shadow-inner"
               required
             />
@@ -265,11 +271,11 @@ export const AnalysisInput: React.FC<AnalysisInputProps> = ({ onAnalyze, isAnaly
               onChange={(e) => setAssetClass(e.target.value as AssetClass)}
               className="w-full bg-[#070b14] border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:outline-none focus:border-cyan-500 shadow-inner"
             >
-              <option value="Saham US">Saham US (Wall Street / NYSE / NASDAQ)</option>
               <option value="Commodity">Commodity (XAUUSD / Oil)</option>
               <option value="Crypto">Cryptocurrency (BTC / ETH / SOL)</option>
               <option value="Forex">Forex (EUR / GBP / JPY)</option>
               <option value="Saham IDX">Saham IDX (Indonesia)</option>
+              <option value="Saham US">Saham US (Wall Street / NYSE / NASDAQ)</option>
             </select>
           </div>
 
@@ -285,35 +291,36 @@ export const AnalysisInput: React.FC<AnalysisInputProps> = ({ onAnalyze, isAnaly
             </div>
             <select
               value={timeframe}
-              onChange={(e) => setTimeframe(e.target.value as Timeframe)}
+              onChange={(e) => handleTimeframeChange(e.target.value as Timeframe)}
               className="w-full bg-[#070b14] border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:outline-none focus:border-cyan-500 shadow-inner"
             >
-              <option value="M5">M5 (5 Menit)</option>
-              <option value="M15">M15 (15 Menit)</option>
-              <option value="H1">H1 (1 Jam)</option>
-              <option value="H4">H4 (4 Jam)</option>
-              <option value="Daily">Daily (Harian)</option>
-              <option value="Weekly">Weekly (Mingguan)</option>
+              <option value="M1">M1 (1 Menit) - Scalping</option>
+              <option value="M5">M5 (5 Menit) - Scalping</option>
+              <option value="M15">M15 (15 Menit) - Scalping</option>
+              <option value="H1">H1 (1 Jam) - Day Trade</option>
+              <option value="H4">H4 (4 Jam) - Swing Trade</option>
+              <option value="Daily">Daily (Harian) - Swing Trade</option>
+              <option value="Weekly">Weekly (Mingguan) - Swing Trade</option>
             </select>
           </div>
 
-          {/* Trading Method */}
+          {/* Trading Method (Otomatis menyesuaikan Timeframe!) */}
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="text-[11px] font-mono text-slate-300 uppercase">
                 METODE TRADING
               </label>
-              <span className="text-[10px] text-cyan-400 font-mono">
-                Auto-Synced
+              <span className="text-[10px] text-emerald-400 font-mono font-bold">
+                Auto-Locked to TF
               </span>
             </div>
             <select
               value={method}
               onChange={(e) => setMethod(e.target.value as TradingMethod)}
-              className="w-full bg-[#070b14] border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:outline-none focus:border-cyan-500 shadow-inner"
+              className="w-full bg-[#070b14] border border-cyan-800/80 rounded-lg px-3 py-2 text-sm text-cyan-300 font-mono font-bold focus:outline-none focus:border-cyan-500 shadow-inner"
             >
+              <option value="Scalping">Scalping (M1 - M15)</option>
               <option value="Day Trade">Day Trade (M15 - H1)</option>
-              <option value="Scalping">Scalping (M5 - M15)</option>
               <option value="Swing Trade">Swing Trade (H4 - Daily)</option>
             </select>
           </div>

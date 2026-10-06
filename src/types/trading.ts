@@ -1,6 +1,6 @@
 export type AssetClass = 'Forex' | 'Commodity' | 'Crypto' | 'Saham IDX' | 'Saham US';
 
-export type Timeframe = 'M5' | 'M15' | 'H1' | 'H4' | 'Daily' | 'Weekly';
+export type Timeframe = 'M1' | 'M5' | 'M15' | 'H1' | 'H4' | 'Daily' | 'Weekly';
 
 export type TradingMethod = 'Scalping' | 'Day Trade' | 'Swing Trade';
 
