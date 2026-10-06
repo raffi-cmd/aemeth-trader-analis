@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { UploadCloud, Image as ImageIcon, Sparkles, X, AlertCircle, ArrowRight, CheckCircle2, Wand2 } from 'lucide-react';
+import { UploadCloud, Image as ImageIcon, Sparkles, X, AlertCircle, ArrowRight, Wand2 } from 'lucide-react';
 import { AssetClass, Timeframe, TradingMethod } from '../types/trading';
 import { detectChartMetadataFromImage } from '../utils/chartVisionDetector';
 
@@ -10,18 +10,22 @@ interface AnalysisInputProps {
     timeframe: Timeframe;
     method: TradingMethod;
     imageUrl?: string;
+    forcedDirection?: 'BUY' | 'SELL';
+    forcedPrice?: number;
   }) => void;
   isAnalyzing: boolean;
 }
 
 export const AnalysisInput: React.FC<AnalysisInputProps> = ({ onAnalyze, isAnalyzing }) => {
-  const [ticker, setTicker] = useState('XAUUSD');
-  const [assetClass, setAssetClass] = useState<AssetClass>('Commodity');
-  const [timeframe, setTimeframe] = useState<Timeframe>('M15');
-  const [method, setMethod] = useState<TradingMethod>('Scalping');
+  const [ticker, setTicker] = useState('ORCL');
+  const [assetClass, setAssetClass] = useState<AssetClass>('Saham US');
+  const [timeframe, setTimeframe] = useState<Timeframe>('H1');
+  const [method, setMethod] = useState<TradingMethod>('Day Trade');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [autoDetectedBadge, setAutoDetectedBadge] = useState<string | null>(null);
+  const [extractedPrice, setExtractedPrice] = useState<number | undefined>(undefined);
+  const [extractedDirection, setExtractedDirection] = useState<'BUY' | 'SELL' | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const processImageFile = async (file: File) => {
@@ -30,13 +34,26 @@ export const AnalysisInput: React.FC<AnalysisInputProps> = ({ onAnalyze, isAnaly
       const dataUrl = reader.result as string;
       setImagePreview(dataUrl);
 
-      // Otomatis Deteksi Meta Data dari Gambar (Pair, Timeframe, Kategori, Metode)
+      // OCR & Vision Analysis Langsung dari Gambar
       const detected = await detectChartMetadataFromImage(file);
       setTicker(detected.ticker);
       setAssetClass(detected.assetClass);
       setTimeframe(detected.timeframe);
       setMethod(detected.method);
       setAutoDetectedBadge(detected.detectionDetails);
+      setExtractedPrice(detected.extractedPrice);
+      setExtractedDirection(detected.marketDirection);
+
+      // Otomatis picu analisis teknikal sesuai gambar yang diunggah
+      onAnalyze({
+        ticker: detected.ticker,
+        assetClass: detected.assetClass,
+        timeframe: detected.timeframe,
+        method: detected.method,
+        imageUrl: dataUrl,
+        forcedDirection: detected.marketDirection,
+        forcedPrice: detected.extractedPrice
+      });
     };
     reader.readAsDataURL(file);
   };
@@ -66,11 +83,13 @@ export const AnalysisInput: React.FC<AnalysisInputProps> = ({ onAnalyze, isAnaly
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onAnalyze({
-      ticker: ticker.toUpperCase().trim() || 'XAUUSD',
+      ticker: ticker.toUpperCase().trim() || 'ORCL',
       assetClass,
       timeframe,
       method,
-      imageUrl: imagePreview || undefined
+      imageUrl: imagePreview || undefined,
+      forcedDirection: extractedDirection,
+      forcedPrice: extractedPrice
     });
   };
 
@@ -91,20 +110,27 @@ export const AnalysisInput: React.FC<AnalysisInputProps> = ({ onAnalyze, isAnaly
           </div>
           <div>
             <h2 className="text-base font-bold text-white flex items-center gap-2 font-mono">
-              AI VISION & TICKER SCREENER ENGINE
+              AI VISION & CHART RECOGNITION ENGINE
             </h2>
             <p className="text-xs text-slate-400">
-              Input Screenshot Chart TradingView/MetaTrader atau Request Ticker Langsung
+              Input Screenshot Chart TradingView/MetaTrader - Deteksi Otomatis Langsung Dari Gambar
             </p>
           </div>
         </div>
 
         {/* Quick presets */}
         <div className="hidden lg:flex items-center gap-1.5 text-xs font-mono">
-          <span className="text-[11px] text-slate-500 mr-1">Quick:</span>
+          <span className="text-[11px] text-slate-500 mr-1">Preset:</span>
           <button
             type="button"
-            onClick={() => setQuickPair('XAUUSD', 'Commodity', 'M15', 'Scalping')}
+            onClick={() => setQuickPair('ORCL', 'Saham US', 'H1', 'Day Trade')}
+            className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-rose-300 border border-rose-500/30 text-xs transition font-bold"
+          >
+            Oracle (ORCL)
+          </button>
+          <button
+            type="button"
+            onClick={() => setQuickPair('XAUUSD', 'Commodity', 'H1', 'Day Trade')}
             className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-amber-300 border border-amber-500/20 text-xs transition"
           >
             Gold (XAU)
@@ -115,13 +141,6 @@ export const AnalysisInput: React.FC<AnalysisInputProps> = ({ onAnalyze, isAnaly
             className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-orange-400 border border-orange-500/20 text-xs transition"
           >
             Bitcoin (BTC)
-          </button>
-          <button
-            type="button"
-            onClick={() => setQuickPair('BBCA.JK', 'Saham IDX', 'Daily', 'Swing Trade')}
-            className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-blue-400 border border-blue-500/20 text-xs transition"
-          >
-            BBCA (IDX)
           </button>
           <button
             type="button"
@@ -144,7 +163,7 @@ export const AnalysisInput: React.FC<AnalysisInputProps> = ({ onAnalyze, isAnaly
             dragOver
               ? 'border-cyan-400 bg-cyan-950/20'
               : imagePreview
-              ? 'border-cyan-500/40 bg-slate-950/70'
+              ? 'border-cyan-500/50 bg-slate-950/80'
               : 'border-slate-800 hover:border-cyan-500/50 bg-slate-950/40 hover:bg-slate-950/60'
           }`}
         >
@@ -157,58 +176,58 @@ export const AnalysisInput: React.FC<AnalysisInputProps> = ({ onAnalyze, isAnaly
           />
 
           {imagePreview ? (
-            <div className="relative group max-h-64 flex flex-col items-center justify-center overflow-hidden rounded-lg">
+            <div className="relative group max-h-80 flex flex-col items-center justify-center overflow-hidden rounded-lg">
               <img
                 src={imagePreview}
                 alt="Uploaded Chart"
-                className="max-h-60 object-contain rounded-lg border border-slate-800 shadow-xl"
+                className="max-h-72 object-contain rounded-lg border border-slate-800 shadow-2xl"
               />
               <div className="absolute inset-0 bg-slate-950/75 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
-                  className="px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-lg"
+                  className="px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-lg cursor-pointer"
                 >
                   Ganti Gambar
                 </button>
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); clearImage(); }}
-                  className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-1 shadow-lg"
+                  className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-1 shadow-lg cursor-pointer"
                 >
                   <X className="w-4 h-4" /> Hapus
                 </button>
               </div>
 
               {/* Badges on bottom */}
-              <div className="absolute bottom-2 left-2 flex items-center gap-2">
+              <div className="absolute bottom-2 left-2 flex flex-wrap items-center gap-2">
                 <div className="px-2.5 py-1 rounded-md bg-emerald-950/90 text-emerald-400 text-[11px] font-mono border border-emerald-600/50 flex items-center gap-1.5 shadow">
                   <ImageIcon className="w-3.5 h-3.5" /> Chart Vision Ready
                 </div>
                 {autoDetectedBadge && (
                   <div className="px-2.5 py-1 rounded-md bg-cyan-950/90 text-cyan-300 text-[11px] font-mono border border-cyan-500/50 flex items-center gap-1.5 shadow">
                     <Wand2 className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>Auto-Identified from Chart</span>
+                    <span>{autoDetectedBadge}</span>
                   </div>
                 )}
               </div>
             </div>
           ) : (
-            <div className="py-6 flex flex-col items-center justify-center text-slate-400">
+            <div className="py-7 flex flex-col items-center justify-center text-slate-400">
               <div className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-cyan-400 mb-2">
                 <UploadCloud className="w-6 h-6 animate-bounce" />
               </div>
               <p className="text-sm font-semibold text-slate-200">
-                Tarik & Lepaskan Screenshot Chart (TradingView / MT4/MT5 / Saham)
+                Tarik & Lepaskan Screenshot Chart (TradingView / MetaTrader / Saham)
               </p>
-              <p className="text-xs text-slate-400 mt-1 max-w-lg">
-                💡 <strong>AI Otomatis Mendeteksi</strong> pair, timeframe, dan kategori pasar langsung dari gambar tanpa perlu input manual satu per satu!
+              <p className="text-xs text-cyan-400 font-mono mt-1 max-w-lg">
+                ⚡ Sistem otomatis membaca pair/ticker, timeframe, dan struktur chart langsung dari gambar tanpa input manual!
               </p>
             </div>
           )}
         </div>
 
-        {/* Automatic Input Synchronized Display */}
+        {/* Inputs Synchronized Display */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
           
           {/* Ticker Input */}
@@ -217,17 +236,15 @@ export const AnalysisInput: React.FC<AnalysisInputProps> = ({ onAnalyze, isAnaly
               <label className="text-[11px] font-mono text-slate-300 uppercase">
                 TICKER / PAIR
               </label>
-              {autoDetectedBadge && (
-                <span className="text-[10px] text-cyan-400 font-mono flex items-center gap-0.5">
-                  <CheckCircle2 className="w-3 h-3" /> Auto
-                </span>
-              )}
+              <span className="text-[10px] text-cyan-400 font-mono">
+                Auto-Synced
+              </span>
             </div>
             <input
               type="text"
               value={ticker}
               onChange={(e) => setTicker(e.target.value)}
-              placeholder="XAUUSD"
+              placeholder="ORCL"
               className="w-full bg-[#070b14] border border-slate-800 rounded-lg px-3 py-2 text-sm text-cyan-300 font-mono font-bold focus:outline-none focus:border-cyan-500 shadow-inner"
               required
             />
@@ -239,22 +256,20 @@ export const AnalysisInput: React.FC<AnalysisInputProps> = ({ onAnalyze, isAnaly
               <label className="text-[11px] font-mono text-slate-300 uppercase">
                 KATEGORI PASAR
               </label>
-              {autoDetectedBadge && (
-                <span className="text-[10px] text-cyan-400 font-mono flex items-center gap-0.5">
-                  <CheckCircle2 className="w-3 h-3" /> Auto
-                </span>
-              )}
+              <span className="text-[10px] text-cyan-400 font-mono">
+                Auto-Synced
+              </span>
             </div>
             <select
               value={assetClass}
               onChange={(e) => setAssetClass(e.target.value as AssetClass)}
               className="w-full bg-[#070b14] border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:outline-none focus:border-cyan-500 shadow-inner"
             >
-              <option value="Commodity">Commodity (XAUUSD/Oil)</option>
-              <option value="Crypto">Cryptocurrency (BTC/ETH)</option>
-              <option value="Forex">Forex (EUR/GBP/JPY)</option>
+              <option value="Saham US">Saham US (Wall Street / NYSE / NASDAQ)</option>
+              <option value="Commodity">Commodity (XAUUSD / Oil)</option>
+              <option value="Crypto">Cryptocurrency (BTC / ETH / SOL)</option>
+              <option value="Forex">Forex (EUR / GBP / JPY)</option>
               <option value="Saham IDX">Saham IDX (Indonesia)</option>
-              <option value="Saham US">Saham US (Wall Street)</option>
             </select>
           </div>
 
@@ -264,11 +279,9 @@ export const AnalysisInput: React.FC<AnalysisInputProps> = ({ onAnalyze, isAnaly
               <label className="text-[11px] font-mono text-slate-300 uppercase">
                 TIMEFRAME DETECTED
               </label>
-              {autoDetectedBadge && (
-                <span className="text-[10px] text-cyan-400 font-mono flex items-center gap-0.5">
-                  <CheckCircle2 className="w-3 h-3" /> Auto
-                </span>
-              )}
+              <span className="text-[10px] text-cyan-400 font-mono">
+                Auto-Synced
+              </span>
             </div>
             <select
               value={timeframe}
@@ -290,19 +303,17 @@ export const AnalysisInput: React.FC<AnalysisInputProps> = ({ onAnalyze, isAnaly
               <label className="text-[11px] font-mono text-slate-300 uppercase">
                 METODE TRADING
               </label>
-              {autoDetectedBadge && (
-                <span className="text-[10px] text-cyan-400 font-mono flex items-center gap-0.5">
-                  <CheckCircle2 className="w-3 h-3" /> Auto
-                </span>
-              )}
+              <span className="text-[10px] text-cyan-400 font-mono">
+                Auto-Synced
+              </span>
             </div>
             <select
               value={method}
               onChange={(e) => setMethod(e.target.value as TradingMethod)}
               className="w-full bg-[#070b14] border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:outline-none focus:border-cyan-500 shadow-inner"
             >
-              <option value="Scalping">Scalping (M5 - M15)</option>
               <option value="Day Trade">Day Trade (M15 - H1)</option>
+              <option value="Scalping">Scalping (M5 - M15)</option>
               <option value="Swing Trade">Swing Trade (H4 - Daily)</option>
             </select>
           </div>
