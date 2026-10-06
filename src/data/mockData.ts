@@ -1,0 +1,190 @@
+import { AnalysisResult, ScreenerItem } from '../types/trading';
+
+export const INITIAL_SCREENER_DATA: ScreenerItem[] = [
+  {
+    ticker: 'XAUUSD',
+    name: 'Gold vs US Dollar',
+    assetClass: 'Commodity',
+    timeframe: 'H1',
+    currentPrice: 2658.45,
+    change24h: 0.84,
+    method: 'Day Trade',
+    decision: 'BUY',
+    executionType: 'Buy Limit',
+    winrate: 68,
+    rr: '1:2.4',
+    status: 'READY',
+  },
+  {
+    ticker: 'BTCUSDT',
+    name: 'Bitcoin / Tether',
+    assetClass: 'Crypto',
+    timeframe: 'M15',
+    currentPrice: 63840.10,
+    change24h: 3.12,
+    method: 'Scalping',
+    decision: 'BUY',
+    executionType: 'Market Order',
+    winrate: 74,
+    rr: '1:1.6',
+    status: 'TRIGGERED',
+  },
+  {
+    ticker: 'EURUSD',
+    name: 'Euro vs US Dollar',
+    assetClass: 'Forex',
+    timeframe: 'H4',
+    currentPrice: 1.0842,
+    change24h: -0.21,
+    method: 'Swing Trade',
+    decision: 'SELL',
+    executionType: 'Sell Limit',
+    winrate: 58,
+    rr: '1:2.2',
+    status: 'READY',
+  },
+  {
+    ticker: 'BBCA.JK',
+    name: 'Bank Central Asia Tbk',
+    assetClass: 'Saham IDX',
+    timeframe: 'Daily',
+    currentPrice: 10450,
+    change24h: 1.45,
+    method: 'Swing Trade',
+    decision: 'BUY',
+    executionType: 'Buy Stop',
+    winrate: 64,
+    rr: '1:2.8',
+    status: 'READY',
+  },
+  {
+    ticker: 'NVDA',
+    name: 'NVIDIA Corporation',
+    assetClass: 'Saham US',
+    timeframe: 'H1',
+    currentPrice: 132.80,
+    change24h: 2.35,
+    method: 'Day Trade',
+    decision: 'BUY',
+    executionType: 'Buy Limit',
+    winrate: 66,
+    rr: '1:2.1',
+    status: 'READY',
+  },
+  {
+    ticker: 'ETHUSDT',
+    name: 'Ethereum / Tether',
+    assetClass: 'Crypto',
+    timeframe: 'H1',
+    currentPrice: 2515.60,
+    change24h: -1.15,
+    method: 'Day Trade',
+    decision: 'WAIT & SEE',
+    executionType: 'Wait & See',
+    winrate: 45,
+    rr: '1:1.0',
+    status: 'WAITING_BAR1',
+  },
+  {
+    ticker: 'GBPUSD',
+    name: 'British Pound vs US Dollar',
+    assetClass: 'Forex',
+    timeframe: 'M15',
+    currentPrice: 1.3090,
+    change24h: 0.12,
+    method: 'Scalping',
+    decision: 'SELL',
+    executionType: 'Market Order',
+    winrate: 72,
+    rr: '1:1.3',
+    status: 'TRIGGERED',
+  },
+  {
+    ticker: 'TLKM.JK',
+    name: 'Telkom Indonesia Tbk',
+    assetClass: 'Saham IDX',
+    timeframe: 'Daily',
+    currentPrice: 3080,
+    change24h: -0.65,
+    method: 'Swing Trade',
+    decision: 'BUY',
+    executionType: 'Buy Limit',
+    winrate: 61,
+    rr: '1:2.5',
+    status: 'READY',
+  }
+];
+
+export const SAMPLE_ANALYSIS_XAUUSD: AnalysisResult = {
+  engineVersion: '10.0-PROD',
+  id: 'ANL-202610-0982',
+  timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+  ticker: 'XAUUSD',
+  assetClass: 'Commodity',
+  timeframe: 'H1',
+  tradingMethod: 'Day Trade',
+  decision: 'BUY',
+  executionType: 'Buy Limit',
+  priceLevels: {
+    entryMin: 2652.50,
+    entryMax: 2655.00,
+    tp1: 2670.00,
+    tp2: 2685.00,
+    sl: 2642.00,
+    riskRewardRatio: '1:2.4'
+  },
+  probability: {
+    winratePercent: 68,
+    confidenceLevel: 'HIGH',
+    confluenceBonus: true,
+    factors: [
+      'RR Ratio 1:2.4 (Base 55%)',
+      'Bullish Orderblock Retest M15/H1',
+      'Multi-Timeframe Trend Alignment (H4 Bullish)',
+      'Candle 1 Locked Bullish Pinbar Rejection (+5% Bonus)',
+      'Geopolitical Safe Haven Demand Catalyst'
+    ]
+  },
+  technical: {
+    marketStructure: 'Uptrend Higher High & Higher Low Structure on H1',
+    chartAndCandlePattern: 'Bullish Hammer / Pinbar Rejection pada Candle 1 (Fixed Closed Bar) menolak area 61.8% Fibo Retracement',
+    keyLevelArea: 'H1 Bullish Order Block (OB) & Fair Value Gap (FVG) di rentang $2,652.00 - $2,655.00',
+    indicatorReadout: {
+      rsi: 'RSI(14) berada di level 48.6 (Rebounding dari area oversold 40-50 bullish pullback)',
+      macd: 'MACD Histogram mengering ke arah zero-line, signal line bersiap bullish cross',
+      maPosition: 'Harga bertahan kokoh di atas EMA 50 & EMA 200 H1',
+      volume: 'Volume buy-side meningkat 38% di atas MA Volume 20 saat rejection'
+    }
+  },
+  fundamental: {
+    sentiment: 'Bullish',
+    catalystAndMacro: 'Ekspektasi dovish kebijakan suku bunga The Fed pada FOMC meeting mendatang serta tensi geopolitik Timur Tengah meningkatkan demand aset safe haven emas global.'
+  },
+  confirmationRule: 'Pasang Pending Order Buy Limit di rentang $2,652.50 - $2,655.00. Wajib tunggu retest sentuhan level dengan validasi wick rejection di Candle 1 M15 sebelum membiarkan order aktif. Cut loss tanpa toleransi jika Candle 1 H1 ditutup di bawah $2,642.00.',
+  jsonPayload: JSON.stringify({
+    engine_version: "10.0-PROD",
+    status: "SUCCESS",
+    ticker: "XAUUSD",
+    asset_class: "Commodity",
+    timeframe: "H1",
+    trading_method: "DAY_TRADE",
+    decision: "BUY",
+    execution_type: "BUY_LIMIT",
+    price_levels: {
+      entry_min: 2652.50,
+      entry_max: 2655.00,
+      tp1: 2670.00,
+      tp2: 2685.00,
+      sl: 2642.00,
+      risk_reward_ratio: "1:2.4"
+    },
+    probability: {
+      winrate_percent: 68,
+      confidence_level: "HIGH"
+    },
+    analysis_summary: {
+      technical: "H1 Bullish pinbar rejection di demand zone $2652-2655, EMA50 dynamic support valid.",
+      fundamental: "Safe haven gold demand meningkat di tengah spekulasi penurunan yield US Treasury."
+    }
+  }, null, 2)
+};
