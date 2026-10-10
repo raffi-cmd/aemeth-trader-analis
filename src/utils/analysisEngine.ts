@@ -153,46 +153,74 @@ export function generateRealisticTradingAnalysis(params: GenerateAnalysisParams)
 
   // ---- Tentukan Precision Desimal ----
   let precision = 2;
-  if (basePrice < 0.01) precision = 6;
-  else if (basePrice < 1) precision = 4;
-  else if (basePrice < 10) precision = 3;
-  else if (basePrice < 100) precision = 2;
-  else if (basePrice < 10000) precision = 2;
-  else precision = 2;
+  const isIDX = assetClass === 'Saham IDX';
+  if (isIDX) {
+    precision = 0;
+  } else if (basePrice < 0.01) {
+    precision = 6;
+  } else if (basePrice < 1) {
+    precision = 4;
+  } else if (basePrice < 10) {
+    precision = 3;
+  } else if (basePrice < 100) {
+    precision = 2;
+  } else {
+    precision = 2;
+  }
 
   // ---- Hitung Level Harga Dinamis ----
   const cfg = getPriceLevelConfig(tradingMethod, decision, timeframe);
 
-  const slDelta = Number((basePrice * cfg.slPct).toFixed(precision));
-  const tp1Delta = Number((basePrice * cfg.tp1Pct).toFixed(precision));
-  const tp2Delta = Number((basePrice * cfg.tp2Pct).toFixed(precision));
+  const slDelta = isIDX 
+    ? Math.max(5, Math.round(basePrice * cfg.slPct))
+    : Number((basePrice * cfg.slPct).toFixed(precision));
+  const tp1Delta = isIDX 
+    ? Math.max(5, Math.round(basePrice * cfg.tp1Pct))
+    : Number((basePrice * cfg.tp1Pct).toFixed(precision));
+  const tp2Delta = isIDX 
+    ? Math.max(10, Math.round(basePrice * cfg.tp2Pct))
+    : Number((basePrice * cfg.tp2Pct).toFixed(precision));
 
-  const entryMin = Number((decision === 'BUY' ? basePrice - slDelta * 0.1 : basePrice).toFixed(precision));
-  const entryMax = Number((decision === 'BUY' ? basePrice : basePrice + slDelta * 0.1).toFixed(precision));
+  const entryMin = isIDX
+    ? Math.round(decision === 'BUY' ? basePrice - slDelta * 0.1 : basePrice)
+    : Number((decision === 'BUY' ? basePrice - slDelta * 0.1 : basePrice).toFixed(precision));
+  const entryMax = isIDX
+    ? Math.round(decision === 'BUY' ? basePrice : basePrice + slDelta * 0.1)
+    : Number((decision === 'BUY' ? basePrice : basePrice + slDelta * 0.1).toFixed(precision));
 
-  const sl = Number((decision === 'BUY' ? basePrice - slDelta : basePrice + slDelta).toFixed(precision));
-  const tp1 = Number((decision === 'BUY' ? basePrice + tp1Delta : basePrice - tp1Delta).toFixed(precision));
-  const tp2 = Number((decision === 'BUY' ? basePrice + tp2Delta : basePrice - tp2Delta).toFixed(precision));
+  const sl = isIDX
+    ? Math.round(decision === 'BUY' ? basePrice - slDelta : basePrice + slDelta)
+    : Number((decision === 'BUY' ? basePrice - slDelta : basePrice + slDelta).toFixed(precision));
+  const tp1 = isIDX
+    ? Math.round(decision === 'BUY' ? basePrice + tp1Delta : basePrice - tp1Delta)
+    : Number((decision === 'BUY' ? basePrice + tp1Delta : basePrice - tp1Delta).toFixed(precision));
+  const tp2 = isIDX
+    ? Math.round(decision === 'BUY' ? basePrice + tp2Delta : basePrice - tp2Delta)
+    : Number((decision === 'BUY' ? basePrice + tp2Delta : basePrice - tp2Delta).toFixed(precision));
 
   const rrRatioStr = `1:${cfg.rrRatio.toFixed(1)}`;
   const { winrate, confidence } = calculateWinrateByRR(cfg.rrRatio, true);
 
   // ---- Asset Profile ----
   const profile = getAssetProfile(ticker);
-  const fmtPrice = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: precision });
+  const curSymbol = isIDX ? 'Rp ' : '$';
+  const fmtPrice = (n: number) => {
+    if (isIDX) return `Rp ${Math.round(n).toLocaleString('id-ID')}`;
+    return `$${n.toLocaleString('en-US', { minimumFractionDigits: precision, maximumFractionDigits: precision })}`;
+  };
   const D = decision;
   const isBuy = D === 'BUY';
 
   // ---- Bangun Technical Analysis (Kontekstual per Chart) ----
   const technicalTexts = {
-    marketStructure: `${isBuy ? 'Bullish Reversal / Continuation' : 'Bearish Breakdown / Distribution'} pada ${timeframe} ${ticker}. ${isBuy ? `Struktur pasar terbentuk Higher Low di zona $${fmtPrice(entryMin)}, neckline breakout potensial menuju $${fmtPrice(tp2)}.` : `Break of Structure (BOS) ke bawah menembus support lokal $${fmtPrice(basePrice)}, potensi lanjutan penurunan ke $${fmtPrice(tp2)}.`}`,
+    marketStructure: `${isBuy ? 'Bullish Reversal / Continuation' : 'Bearish Breakdown / Distribution'} pada ${timeframe} ${ticker}. ${isBuy ? `Struktur pasar terbentuk Higher Low di zona ${fmtPrice(entryMin)}, neckline breakout potensial menuju ${fmtPrice(tp2)}.` : `Break of Structure (BOS) ke bawah menembus support lokal ${fmtPrice(basePrice)}, potensi lanjutan penurunan ke ${fmtPrice(tp2)}.`}`,
 
     chartAndCandlePattern: `${isBuy
       ? `Bullish ${tradingMethod === 'Scalping' ? 'Engulfing / Pinbar Rejection' : tradingMethod === 'Day Trade' ? 'Marubozu Breakout' : 'Morning Star / Double Bottom'}`
       : `Bearish ${tradingMethod === 'Scalping' ? 'Marubozu / Continuation Drop' : tradingMethod === 'Day Trade' ? 'Engulfing Breakdown' : 'Evening Star / Double Top'}`
     } terkonfirmasi pada Candle 1 (Bar-1 Fixed ${timeframe}). ${isBuy ? `Wick panjang ke bawah menolak supply, candle ditutup bersih di atas midpoint — buyer kontrol penuh.` : `Full body bearish tanpa shadow atas — zero buying pressure, seller dominasi penuh.`}`,
 
-    keyLevelArea: `${isBuy ? '🟢' : '🔴'} ENTRY ZONE: $${fmtPrice(Math.min(entryMin, entryMax))} – $${fmtPrice(Math.max(entryMin, entryMax))}\n🎯 TAKE PROFIT 1: $${fmtPrice(tp1)} (Partial Close 50% + Move SL ke Entry)\n🎯 TAKE PROFIT 2: $${fmtPrice(tp2)} (Full Target | RR ${rrRatioStr})\n${isBuy ? '🔴' : '🟢'} STOP LOSS STRICT: $${fmtPrice(sl)} (${isBuy ? 'Di bawah swing low / Invalid zone' : 'Di atas swing high / Invalid zone'})`,
+    keyLevelArea: `${isBuy ? '🟢' : '🔴'} ENTRY ZONE: ${fmtPrice(Math.min(entryMin, entryMax))} – ${fmtPrice(Math.max(entryMin, entryMax))}\n🎯 TAKE PROFIT 1: ${fmtPrice(tp1)} (Partial Close 50% + Move SL ke Entry)\n🎯 TAKE PROFIT 2: ${fmtPrice(tp2)} (Full Target | RR ${rrRatioStr})\n${isBuy ? '🔴' : '🟢'} STOP LOSS STRICT: ${fmtPrice(sl)} (${isBuy ? 'Di bawah swing low / Invalid zone' : 'Di atas swing high / Invalid zone'})`,
 
     indicatorReadout: {
       rsi: isBuy
@@ -202,8 +230,8 @@ export function generateRealisticTradingAnalysis(params: GenerateAnalysisParams)
         ? `MACD Histogram: Bar mulai menyempit dari sisi negatif → ${tradingMethod === 'Scalping' ? 'akan golden cross' : 'golden cross baru terkonfirmasi'} pada ${timeframe} ${ticker}. Signal line cut ke atas.`
         : `MACD Histogram melebar ke sisi negatif. Death cross terkonfirmasi — momentum bearish akselerasi di ${timeframe}.`,
       maPosition: isBuy
-        ? `Harga bounce dari EMA 20 yang bertindak sebagai support dinamis pada ${timeframe}. EMA 50 berpotensi sebagai support berikutnya di $${fmtPrice(basePrice * 0.985)}.`
-        : `Candle 1 ditutup di bawah EMA 20 & EMA 50 (${timeframe}). Kedua EMA membentuk resistance cluster di $${fmtPrice(basePrice * 1.012)}.`,
+        ? `Harga bounce dari EMA 20 yang bertindak sebagai support dinamis pada ${timeframe}. EMA 50 berpotensi sebagai support berikutnya di ${fmtPrice(basePrice * 0.985)}.`
+        : `Candle 1 ditutup di bawah EMA 20 & EMA 50 (${timeframe}). Kedua EMA membentuk resistance cluster di ${fmtPrice(basePrice * 1.012)}.`,
       volume: isBuy
         ? `Volume candle reversal ${(1.6 + (seed % 10) / 10).toFixed(1)}x di atas rata-rata MA Volume 20 — konfirmasi buying pressure institusional masuk.`
         : `Volume breakdown ${(1.8 + (seed % 12) / 10).toFixed(1)}x lebih tinggi dari rata-rata — distribusi agresif dari smart money terdeteksi.`,
@@ -257,7 +285,7 @@ export function generateRealisticTradingAnalysis(params: GenerateAnalysisParams)
       factors: [
         `Risk-to-Reward Ratio ${rrRatioStr} — ${tradingMethod} ${assetClass} ${timeframe} Kalibrasi Dinamis`,
         `Candle 1 Locked Anti-Repaint: Bar-1 ${timeframe} ${ticker} dikunci, bebas dari fluktuasi intraday`,
-        `Price Action ${isBuy ? 'Bullish Confluence' : 'Bearish Confluence'}: ${isBuy ? `Higher Low terbentuk di zona entry $${fmtPrice(basePrice)}` : `Lower High rejected di zona $${fmtPrice(basePrice)}`}`,
+        `Price Action ${isBuy ? 'Bullish Confluence' : 'Bearish Confluence'}: ${isBuy ? `Higher Low terbentuk di zona entry ${fmtPrice(basePrice)}` : `Lower High rejected di zona ${fmtPrice(basePrice)}`}`,
         `EMA Dynamic: Harga ${isBuy ? 'di atas' : 'di bawah'} cluster EMA 20 & EMA 50 pada ${timeframe} — trend ${isBuy ? 'bullish' : 'bearish'} terkonfirmasi`,
         `Konfluensi Volume + RSI ${isBuy ? 'Reversal' : 'Expansion'}: ${isBuy ? 'Akumulasi' : 'Distribusi'} terdeteksi dengan spike volume ${(1.6 + seed % 8 / 10).toFixed(1)}x rata-rata (+5% Winrate Bonus)`,
       ],
@@ -268,8 +296,8 @@ export function generateRealisticTradingAnalysis(params: GenerateAnalysisParams)
       catalystAndMacro: isBuy ? profile.catalystBull : profile.catalystBear,
     },
     confirmationRule: cfg.executionType === 'Market Order'
-      ? `Eksekusi LANGSUNG ${D} NOW pada $${fmtPrice(Math.min(entryMin, entryMax))} – $${fmtPrice(Math.max(entryMin, entryMax))}. Candle 1 ${timeframe} ${ticker} telah ditutup valid ${isBuy ? 'bullish' : 'bearish'}. Cut loss WAJIB jika Bar-1 closed di ${isBuy ? 'bawah' : 'atas'} $${fmtPrice(sl)}.`
-      : `Pasang ${cfg.executionType.toUpperCase()} di zona $${fmtPrice(Math.min(entryMin, entryMax))} – $${fmtPrice(Math.max(entryMin, entryMax))}. Amankan 50% profit di TP1 $${fmtPrice(tp1)}, geser SL ke entry. Full close di TP2 $${fmtPrice(tp2)}. WAJIB cut loss jika Candle 1 (${timeframe}) ${ticker} ditutup tembus $${fmtPrice(sl)}.`,
+      ? `Eksekusi LANGSUNG ${D} NOW pada ${fmtPrice(Math.min(entryMin, entryMax))} – ${fmtPrice(Math.max(entryMin, entryMax))}. Candle 1 ${timeframe} ${ticker} telah ditutup valid ${isBuy ? 'bullish' : 'bearish'}. Cut loss WAJIB jika Bar-1 closed di ${isBuy ? 'bawah' : 'atas'} ${fmtPrice(sl)}.`
+      : `Pasang ${cfg.executionType.toUpperCase()} di zona ${fmtPrice(Math.min(entryMin, entryMax))} – ${fmtPrice(Math.max(entryMin, entryMax))}. Amankan 50% profit di TP1 ${fmtPrice(tp1)}, geser SL ke entry. Full close di TP2 ${fmtPrice(tp2)}. WAJIB cut loss jika Candle 1 (${timeframe}) ${ticker} ditutup tembus ${fmtPrice(sl)}.`,
     jsonPayload: JSON.stringify(payload, null, 2),
     chartImageUrl: params.imageUrl,
   };

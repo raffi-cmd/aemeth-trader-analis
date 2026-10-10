@@ -1,4 +1,36 @@
 import React, { useState } from 'react';
+
+// ─── Smart price formatter: Rp for IDX, $ for everything else ───
+function formatPrice(price: number, assetClass: string): string {
+  const isIDX = assetClass === 'Saham IDX';
+  const isCrypto = assetClass === 'Crypto';
+  const isForex = assetClass === 'Forex';
+
+  if (isIDX) {
+    // Indonesian stocks: integer, comma thousands, Rp prefix
+    return `Rp ${Math.round(price).toLocaleString('id-ID')}`;
+  }
+  if (isForex) {
+    // Forex: up to 5 decimal places
+    return `$${price.toFixed(5)}`;
+  }
+  if (isCrypto && price < 1) {
+    return `$${price.toFixed(4)}`;
+  }
+  if (isCrypto && price < 10) {
+    return `$${price.toFixed(3)}`;
+  }
+  // Default: 2 decimals, no thousands separator for crypto small prices
+  const formatted = price >= 1000
+    ? price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : price.toFixed(2);
+  return `$${formatted}`;
+}
+
+function formatPriceRange(min: number, max: number, assetClass: string): string {
+  return `${formatPrice(min, assetClass)} – ${formatPrice(max, assetClass)}`;
+}
+
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -166,7 +198,7 @@ export const ResultDashboard: React.FC<ResultDashboardProps> = ({ analysis }) =>
                 <ArrowDownCircle className="w-4 h-4" />
               </div>
               <div className="text-xl sm:text-2xl font-black text-white">
-                ${analysis.priceLevels.entryMin} - ${analysis.priceLevels.entryMax}
+                {formatPriceRange(analysis.priceLevels.entryMin, analysis.priceLevels.entryMax, analysis.assetClass)}
               </div>
               <div className="text-[10px] text-cyan-300/80 mt-1">
                 Optimal Re-test / Breakout Zone
@@ -180,7 +212,7 @@ export const ResultDashboard: React.FC<ResultDashboardProps> = ({ analysis }) =>
                 <ArrowUpCircle className="w-4 h-4" />
               </div>
               <div className="text-xl sm:text-2xl font-black text-white">
-                ${analysis.priceLevels.tp1}
+                {formatPrice(analysis.priceLevels.tp1, analysis.assetClass)}
               </div>
               <div className="text-[10px] text-emerald-300/80 mt-1">
                 Amankan Profit 50% & Move SL+
@@ -194,7 +226,7 @@ export const ResultDashboard: React.FC<ResultDashboardProps> = ({ analysis }) =>
                 <Sparkles className="w-4 h-4" />
               </div>
               <div className="text-xl sm:text-2xl font-black text-emerald-300">
-                ${analysis.priceLevels.tp2}
+                {formatPrice(analysis.priceLevels.tp2, analysis.assetClass)}
               </div>
               <div className="text-[10px] text-emerald-200 mt-1">
                 Target Major Runner (RR {analysis.priceLevels.riskRewardRatio})
@@ -208,7 +240,7 @@ export const ResultDashboard: React.FC<ResultDashboardProps> = ({ analysis }) =>
                 <AlertTriangle className="w-4 h-4" />
               </div>
               <div className="text-xl sm:text-2xl font-black text-rose-400">
-                ${analysis.priceLevels.sl}
+                {formatPrice(analysis.priceLevels.sl, analysis.assetClass)}
               </div>
               <div className="text-[10px] text-rose-300/80 mt-1">
                 Cut Loss Jika Bar-1 Closed Tembus
