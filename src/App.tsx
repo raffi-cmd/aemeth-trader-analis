@@ -25,6 +25,8 @@ export function App() {
     timeframe: Timeframe;
     method: TradingMethod;
     imageUrl?: string;
+    forcedDirection?: 'BUY' | 'SELL';
+    forcedPrice?: number;
   }) => {
     setIsAnalyzing(true);
 
@@ -34,7 +36,9 @@ export function App() {
         assetClass: params.assetClass,
         timeframe: params.timeframe,
         method: params.method,
-        imageUrl: params.imageUrl
+        imageUrl: params.imageUrl,
+        forcedDirection: params.forcedDirection,
+        forcedPrice: params.forcedPrice
       });
 
       setAnalysisResult(result);

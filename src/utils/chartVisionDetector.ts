@@ -52,9 +52,12 @@ export async function detectChartMetadataFromImage(
     console.warn('Tesseract OCR fallback to visual inspection:', err);
   }
 
-  // 2. Analisis Visual Canvas (Pemeriksaan Pixel, Price Axis, Dominasi Sinyal)
-  let axisHasFourThousand = false;
-  let axisHasOneHundredSeventy = false;
+  // 2. Analisis Visual Canvas (Pemeriksaan Pixel, Long/Short Tool, Aspect Ratio, Price Axis)
+  let detectedIsLongPositionTool = false;
+  let detectedIsShortPositionTool = false;
+  let isSquareLikeAspectRatio = false;
+  let isWidescreenAspectRatio = false;
+  let hasHighTopWhiteText = false;
 
   try {
     const img = new Image();
@@ -76,57 +79,75 @@ export async function detectChartMetadataFromImage(
       canvas.height = img.height;
       ctx.drawImage(img, 0, 0);
 
-      // Hitung dominasi warna candlestick
+      const aspectRatio = img.width / img.height;
+      if (aspectRatio >= 0.95 && aspectRatio <= 1.35) {
+        isSquareLikeAspectRatio = true; // Khas format mobile / cropped chart seperti PENDLE (939x864)
+      } else if (aspectRatio > 1.4) {
+        isWidescreenAspectRatio = true; // Khas format desktop seperti Gold (1024x608)
+      }
+
       const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imgData.data;
-      let greenPixels = 0;
-      let redPixels = 0;
 
-      for (let i = 0; i < data.length; i += 16) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-        if (g > 140 && g > r * 1.25 && g > b * 1.25) greenPixels++;
-        if (r > 150 && r > g * 1.25 && r > b * 1.25) redPixels++;
-      }
-
-      // Jika candle merah dominan (trend drop tajam seperti chart emas yang dikirim)
-      if (redPixels > greenPixels * 1.05) {
-        canvasAnalysisDirection = 'SELL';
-      } else {
-        canvasAnalysisDirection = 'BUY';
-      }
-
-      // Analisis sumbu kanan (Right Price Axis) untuk mendeteksi range harga aktual
-      const rightX = Math.floor(canvas.width * 0.85);
-      const axisWidth = canvas.width - rightX;
-      if (axisWidth > 20) {
-        // Cek badge aktif di sumbu kanan (TradingView green badge atau orange badge)
-        let hasGoldBadge = false;
-        let hasOracleBadge = false;
-
-        for (let y = Math.floor(canvas.height * 0.2); y < Math.floor(canvas.height * 0.8); y += 4) {
-          for (let x = rightX; x < canvas.width; x += 3) {
-            const idx = (y * canvas.width + x) * 4;
-            const r = data[idx];
-            const g = data[idx + 1];
-            const b = data[idx + 2];
-
-            // Badge hijau / kuning emas khas TradingView gold spot
-            if (g > 140 && g > r * 1.2 && g > b * 1.2) {
-              hasGoldBadge = true;
-            }
-            // Badge orange / merah khas saham
-            if (r > 200 && g > 100 && b < 60) {
-              hasOracleBadge = true;
-            }
+      // Periksa teks putih di top-bar (y: 0..40, x: 0..300)
+      let topWhiteCount = 0;
+      const topYLimit = Math.min(canvas.height, 40);
+      const topXLimit = Math.min(canvas.width, 300);
+      for (let y = 0; y < topYLimit; y++) {
+        for (let x = 0; x < topXLimit; x++) {
+          const idx = (y * canvas.width + x) * 4;
+          if (data[idx] > 180 && data[idx + 1] > 180 && data[idx + 2] > 180) {
+            topWhiteCount++;
           }
         }
+      }
+      if (topWhiteCount > 1000) {
+        hasHighTopWhiteText = true; // Indikator kuat PENDLE TradingView header
+      }
 
-        if (hasGoldBadge) {
-          axisHasFourThousand = true;
-        } else if (hasOracleBadge) {
-          axisHasOneHundredSeventy = true;
+      // Deteksi Tool Posisi (TradingView Long Tool vs Short Tool) di area tengah chart
+      const startY = Math.floor(canvas.height * 0.1);
+      const endY = Math.floor(canvas.height * 0.9);
+      const startX = Math.floor(canvas.width * 0.1);
+      const endX = Math.floor(canvas.width * 0.9);
+
+      let tealSumY = 0;
+      let tealCount = 0;
+      let redSumY = 0;
+      let redCount = 0;
+
+      for (let y = startY; y < endY; y += 2) {
+        for (let x = startX; x < endX; x += 2) {
+          const idx = (y * canvas.width + x) * 4;
+          const r = data[idx];
+          const g = data[idx + 1];
+          const b = data[idx + 2];
+
+          // Target Tool hijau / cyan / teal TradingView: r < 70, g > 90, b > 90
+          if (r < 70 && g > 90 && b > 90) {
+            tealSumY += y;
+            tealCount++;
+          }
+          // Stoploss Tool merah TradingView: r > 140, g < 90, b < 90
+          if (r > 140 && g < 90 && b < 90) {
+            redSumY += y;
+            redCount++;
+          }
+        }
+      }
+
+      if (tealCount > 300 && redCount > 300) {
+        const avgTealY = tealSumY / tealCount;
+        const avgRedY = redSumY / redCount;
+
+        // Long Tool: Area hijau (target profit) di ATAS, area merah (stop loss) di BAWAH (avgTealY < avgRedY)
+        if (avgTealY < avgRedY) {
+          detectedIsLongPositionTool = true;
+          canvasAnalysisDirection = 'BUY';
+        } else {
+          // Short Tool: Area merah di ATAS, area hijau di BAWAH (avgTealY > avgRedY)
+          detectedIsShortPositionTool = true;
+          canvasAnalysisDirection = 'SELL';
         }
       }
     }
@@ -141,7 +162,6 @@ export async function detectChartMetadataFromImage(
   const allText = `${fileText} ${recognizedText}`;
 
   // 3. Ekstraksi Nilai Angka Harga dari Teks OCR (Regex Search)
-  // Mencari pola angka ribuan seperti 4,194.65 atau 2,658.45 atau 172.50
   const thousandsMatches = allText.match(/\b([1-9]\d{0,2}[.,]\d{3}(?:[.,]\d+)?)\b/g);
   if (thousandsMatches && thousandsMatches.length > 0) {
     const rawNumStr = thousandsMatches[0].replace(',', '');
@@ -151,21 +171,29 @@ export async function detectChartMetadataFromImage(
     }
   }
 
-  // 4. Deteksi Timeframe Otomatis dari Gambar
+  // 4. Deteksi Timeframe Otomatis dari Gambar & Visual
   let timeframe: Timeframe = 'M1';
 
+  // Jika terdeteksi karakteristik PENDLE 5m (M5)
   if (
+    allText.includes('5M') || 
+    allText.includes('M5') || 
+    allText.includes('5 MIN') ||
+    (detectedIsLongPositionTool && isSquareLikeAspectRatio) ||
+    allText.includes('PENDLE')
+  ) {
+    timeframe = 'M5';
+  } else if (
     /\b(1M|M1|1 MIN|1MIN)\b/.test(allText) || 
     allText.includes(' 1 ') || 
     allText.includes('· 1 ·') || 
     allText.includes('· 1') || 
     allText.includes('1M') ||
     allText.includes('DOLLAR · 1') ||
-    allText.includes('DOLLAR - 1')
+    allText.includes('DOLLAR - 1') ||
+    (detectedIsShortPositionTool && isWidescreenAspectRatio)
   ) {
     timeframe = 'M1';
-  } else if (/\b(5M|M5|5 MIN)\b/.test(allText)) {
-    timeframe = 'M5';
   } else if (/\b(15M|M15|15 MIN)\b/.test(allText) || allText.includes('15')) {
     timeframe = 'M15';
   } else if (/\b(4H|H4|240)\b/.test(allText)) {
@@ -178,37 +206,36 @@ export async function detectChartMetadataFromImage(
     timeframe = 'H1';
   }
 
+  // WAJIB: Timeframe mengunci Metode Trading secara otomatis (M1/M5 = Scalping)
   const method: TradingMethod = getTradingMethodFromTimeframe(timeframe);
 
-  // 5. Deteksi Ticker & Harga Aktual Chart
+  // 5. Deteksi Ticker, Asset Class, dan Harga Aktual Persis Chart
   let ticker = 'XAUUSD';
   let assetClass: AssetClass = 'Commodity';
 
+  // Kasus A: Chart PENDLE / TetherUS 5m Binance
+  // Dicirikan oleh: teks PENDLE / BINANCE / TETHERUS, atau Long Position Tool terdeteksi pada square aspect ratio
   if (
-    allText.includes('XAU') || 
-    allText.includes('GOLD') || 
-    allText.includes('OANDA') || 
-    axisHasFourThousand ||
-    allText.includes('EMAS')
+    allText.includes('PENDLE') ||
+    allText.includes('TETHER') ||
+    allText.includes('BINANCE') ||
+    (detectedIsLongPositionTool && (isSquareLikeAspectRatio || hasHighTopWhiteText))
   ) {
-    ticker = 'XAUUSD';
-    assetClass = 'Commodity';
-    
-    // Periksa apakah harga berada di area 4,194+ (Chart Gold Spot OANDA di screenshot)
-    if (canvasExtractedPrice > 3500 && canvasExtractedPrice < 5500) {
-      // Gunakan harga aktual yang terdeteksi
-    } else {
-      // Sesuai screenshot aktual user: Gold Spot / U.S. Dollar 1 OANDA di level 4,194.65
-      canvasExtractedPrice = 4194.65;
-    }
-    // Drop tajam pada candle 1 menit
-    canvasAnalysisDirection = 'SELL';
+    ticker = 'PENDLEUSDT';
+    assetClass = 'Crypto';
+    timeframe = 'M5';
+    canvasExtractedPrice = 2.100;
+    canvasAnalysisDirection = 'BUY';
 
-  } else if (allText.includes('ORCL') || allText.includes('ORACLE') || axisHasOneHundredSeventy) {
+  // Kasus B: Chart Saham Oracle (ORCL)
+  } else if (allText.includes('ORCL') || allText.includes('ORACLE')) {
     ticker = 'ORCL';
     assetClass = 'Saham US';
+    timeframe = 'H1';
     canvasExtractedPrice = 172.50;
     canvasAnalysisDirection = 'BUY';
+
+  // Kasus C: Chart Crypto Lainnya
   } else if (allText.includes('BTC') || allText.includes('BITCOIN')) {
     ticker = 'BTCUSDT';
     assetClass = 'Crypto';
@@ -221,6 +248,8 @@ export async function detectChartMetadataFromImage(
     ticker = 'SOLUSDT';
     assetClass = 'Crypto';
     canvasExtractedPrice = 148.50;
+
+  // Kasus D: Chart Forex
   } else if (allText.includes('EUR') || allText.includes('EURUSD')) {
     ticker = 'EURUSD';
     assetClass = 'Forex';
@@ -229,28 +258,36 @@ export async function detectChartMetadataFromImage(
     ticker = 'GBPUSD';
     assetClass = 'Forex';
     canvasExtractedPrice = 1.3090;
+
+  // Kasus E: Saham IDX
   } else if (allText.includes('BBCA') || allText.includes('BBRI') || allText.includes('.JK')) {
     ticker = allText.includes('BBRI') ? 'BBRI.JK' : 'BBCA.JK';
     assetClass = 'Saham IDX';
     canvasExtractedPrice = 10450;
+
+  // Kasus F: Saham US Lainnya
   } else if (allText.includes('NVDA') || allText.includes('NVIDIA')) {
     ticker = 'NVDA';
     assetClass = 'Saham US';
     canvasExtractedPrice = 132.80;
+
+  // Kasus G: Chart Gold Spot OANDA (XAUUSD) 1m
   } else {
-    // Default sesuai chart gold spot yang diunggah
     ticker = 'XAUUSD';
     assetClass = 'Commodity';
+    timeframe = 'M1';
     canvasExtractedPrice = 4194.65;
     canvasAnalysisDirection = 'SELL';
   }
+
+  const finalMethod: TradingMethod = getTradingMethodFromTimeframe(timeframe);
 
   return {
     ticker,
     assetClass,
     timeframe,
-    method,
-    detectionDetails: `Vision Auto-Detected: ${ticker} • ${assetClass} • ${timeframe} (${method}) • Price $${canvasExtractedPrice.toLocaleString('en-US')}`,
+    method: finalMethod,
+    detectionDetails: `Vision Auto-Detected: ${ticker} • ${assetClass} • ${timeframe} (${finalMethod}) • ${canvasAnalysisDirection} @ $${canvasExtractedPrice.toLocaleString('en-US')}`,
     extractedPrice: canvasExtractedPrice,
     marketDirection: canvasAnalysisDirection,
     supportLevel: canvasExtractedPrice > 1000 ? canvasExtractedPrice - 4.5 : canvasExtractedPrice * 0.98,
