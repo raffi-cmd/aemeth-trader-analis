@@ -144,7 +144,7 @@ export function generateRealisticTradingAnalysis(params: GenerateAnalysisParams)
       'META': 530.80, 'GOOGL': 178.20, 'AMD': 155.60,
       'EURUSD': 1.0842, 'GBPUSD': 1.3090, 'USDJPY': 149.80,
       'AUDUSD': 0.6510, 'USDCAD': 1.3620,
-      'BBCA.JK': 10450, 'BBRI.JK': 5200, 'BMRI.JK': 7100,
+      'BBCA.JK': 10450, 'BBRI.JK': 4800, 'BMRI.JK': 7100,
       'ASII.JK': 4900, 'TLKM.JK': 2800,
       'DETECTED_CRYPTO': 50.00, 'DETECTED_ASSET': 100.00,
     };
